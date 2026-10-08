@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bellhaven Review</title>
+<style>
+  :root {
+    --bg: #f5f5f2; --panel: #fff; --ink: #1d1d1b; --muted: #6b6b66; --line: #e3e3de;
+    --brand: #1f3b4d; --brand-ink: #fff; --accent: #e8eef2;
+    --ok: #2e7d32; --ok-bg: #eaf5ea; --err: #b3261e; --err-bg: #fdecea; --warn-bg: #fbeed5; --diff: #fff4d6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #151719; --panel: #1e2124; --ink: #e8e8e4; --muted: #9a9a94; --line: #33373b;
+      --brand: #16303f; --accent: #26343d;
+      --ok: #5cb860; --ok-bg: #1c2e1d; --err: #f08a80; --err-bg: #3a1f1d; --warn-bg: #3a3020; --diff: #3a3420;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { font: 14px/1.45 system-ui, -apple-system, sans-serif; margin: 0; background: var(--bg); color: var(--ink); }
+  a { color: inherit; }
+  header { position: sticky; top: 0; z-index: 5; background: var(--brand); color: var(--brand-ink); padding: 10px 24px; }
+  .bar { max-width: 1100px; margin: 0 auto; display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+  .bar strong { font-size: 15px; }
+  .stat { opacity: .85; font-size: 13px; }
+  .bar form { margin: 0 0 0 auto; }
+  nav { max-width: 1100px; margin: 8px auto 0; display: flex; gap: 6px; flex-wrap: wrap; }
+  nav a { text-decoration: none; font-size: 12px; padding: 2px 9px; border-radius: 999px; background: rgba(255,255,255,.14); }
+  nav a:hover { background: rgba(255,255,255,.28); }
+  main { max-width: 1100px; margin: 0 auto; padding: 12px 24px 80px; }
+  .tools { display: flex; gap: 8px; align-items: center; margin: 12px 0 4px; flex-wrap: wrap; }
+  .tools input[type=search] { flex: 1; min-width: 200px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); color: var(--ink); }
+  .tools label { font-size: 13px; color: var(--muted); }
+  h2 { margin: 26px 0 6px; font-size: 15px; display: flex; align-items: center; gap: 8px; scroll-margin-top: 90px; }
+  h2 .n { font-size: 12px; font-weight: 500; background: var(--accent); padding: 0 8px; border-radius: 999px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-left: 4px solid var(--line); border-radius: 6px; padding: 12px 14px; margin: 10px 0; scroll-margin-top: 90px; }
+  .card.c-high { border-left-color: #5b8db0; } .card.c-medium { border-left-color: #d9a441; }
+  .card.failed { border-color: var(--err); border-left-color: var(--err); }
+  .card:target { box-shadow: 0 0 0 3px #5b8db055; }
+  .summary { font-weight: 600; }
+  .meta { color: var(--muted); font-size: 12px; margin: 3px 0 8px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .tag { font-size: 11px; padding: 1px 7px; border-radius: 3px; background: var(--accent); color: var(--ink); }
+  .tag.medium { background: var(--warn-bg); } .tag.failed, .tag.warn { background: var(--err-bg); color: var(--err); }
+  .warn { background: var(--err-bg); border-left: 3px solid var(--err); padding: 6px 9px; margin: 6px 0; border-radius: 0 4px 4px 0; }
+  .error { background: var(--err-bg); padding: 6px 9px; margin: 6px 0; font-family: ui-monospace, monospace; font-size: 12px; border-radius: 4px; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; margin: 6px 0; }
+  td, th { border-top: 1px solid var(--line); padding: 4px 6px; text-align: left; vertical-align: top; }
+  th { width: 150px; color: var(--muted); font-weight: 500; }
+  td.diff { background: var(--diff); }
+  .changes th { width: 150px; } .changes .old { color: var(--muted); text-decoration: line-through; }
+  .changes .new { color: var(--ok); font-weight: 600; } .changes .arrow { width: 20px; color: var(--muted); text-align: center; }
+  .changes caption { text-align: left; font-weight: 600; font-size: 12px; color: var(--ok); padding-bottom: 2px; }
+  .ev { font-size: 13px; margin: 3px 0; }
+  details { margin: 6px 0; } summary { cursor: pointer; color: var(--muted); font-size: 13px; }
+  pre { background: var(--bg); padding: 8px; overflow-x: auto; font-size: 12px; border-radius: 4px; }
+  .actions { display: flex; gap: 8px; align-items: center; margin-top: 10px; flex-wrap: wrap; }
+  .actions input[type=text] { flex: 1; min-width: 180px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 4px; background: var(--panel); color: var(--ink); }
+  button { padding: 6px 14px; border: 0; border-radius: 4px; cursor: pointer; font-weight: 600; font: inherit; font-weight: 600; }
+  button:disabled { opacity: .5; cursor: wait; }
+  .approve { background: var(--ok); color: #fff; } .reject { background: var(--accent); color: var(--ink); }
+  .run { background: #fff; color: #1f3b4d; } .link { background: none; padding: 0; text-decoration: underline; font-weight: 400; color: inherit; }
+  .flash { padding: 8px 12px; margin: 10px 0; border-radius: 4px; }
+  .flash.ok { background: var(--ok-bg); } .flash.err { background: var(--err-bg); } .flash.warn { background: var(--warn-bg); }
+  .empty { text-align: center; padding: 40px 0; color: var(--muted); }
+  .done td { font-size: 12px; } .done .s-applied { color: var(--ok); } .done .s-rejected { color: var(--err); }
+  .hidden { display: none !important; }
+  .hint { font-size: 12px; color: var(--muted); }
+  @media (max-width: 640px) { header, main { padding-left: 16px; padding-right: 16px; } th { width: 90px; } }
+</style>
+</head>
+<body>
+<header>
+  <div class="bar">
+    <strong>Bellhaven sync review</strong>
+    <span class="stat">{{ n_pending }} to review{% if n_failed %} · {{ n_failed }} failed{% endif %}</span>
+    {% if run %}<span class="stat">last run {{ run.started_at }} · {{ run.locations }} locations · {{ run.accounts }} accounts · {{ run.new }} new</span>{% endif %}
+    <form method="post" action="/run" data-busy="Running…">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <button class="run">Run pipeline now</button>
+    </form>
+  </div>
+  {% if groups or done %}
+  <nav>
+    {% for kind, label, items in groups %}<a href="#g-{{ kind }}">{{ label }} · {{ items|length }}</a>{% endfor %}
+    {% if done %}<a href="#decided">Decided · {{ done|length }}</a>{% endif %}
+  </nav>
+  {% endif %}
+</header>
+<main>
+{% with msgs = get_flashed_messages(with_categories=true) %}
+  {% for cat, m in msgs %}<div class="flash {{ cat }}">{{ m }}</div>{% endfor %}
+{% endwith %}
+
+{% if groups %}
+<div class="tools">
+  <input type="search" id="filter" placeholder="Filter by name, city, account id…" autocomplete="off">
+  <label><input type="checkbox" id="only-warn"> Only ones with warnings</label>
+</div>
+{% else %}
+<p class="empty">Nothing to review. Run the pipeline to check for changes.</p>
+{% endif %}
+
+{% for kind, label, items in groups %}
+  <section class="group">
+  <h2 id="g-{{ kind }}">{{ label }} <span class="n">{{ items|length }}</span></h2>
+  {% for row in items %}{% set p = row.payload %}{% set w = p.evidence.website %}{% set c = p.evidence.crm %}
+  <div class="card c-{{ p.confidence }} {{ row.status }}" id="k-{{ row.key }}" data-warn="{{ 1 if p.warnings else 0 }}"
+       data-text="{{ (p.summary ~ ' ' ~ (p.account_id or '') ~ ' ' ~ (w.city if w else '') ~ ' ' ~ (c.name if c else ''))|lower }}">
+    <div class="summary">{{ p.summary }}</div>
+    <div class="meta">
+      <span class="tag {{ p.confidence }}">{{ p.confidence }} confidence</span>
+      {% if p.warnings %}<span class="tag warn">{{ p.warnings|length }} warning{{ 's' if p.warnings|length > 1 }}</span>{% endif %}
+      {% if row.status == 'failed' %}<span class="tag failed">last try failed</span>{% endif %}
+      {% if row.status == 'applying' %}<span class="tag warn">was being applied; check the CRM before retrying</span>{% endif %}
+      {% if p.account_id %}<span>account {{ p.account_id }}</span>{% endif %}
+      {% if w %}<a href="{{ w.url }}" target="_blank" rel="noopener">website page ↗</a>{% endif %}
+    </div>
+
+    {% if row.status == 'failed' and row.result %}<div class="error">{{ (row.result|fromjson).error }}</div>{% endif %}
+    {% for msg in p.warnings %}<div class="warn">{{ msg }}</div>{% endfor %}
+
+    {% if p.changes and not (p.kind == 'chow' and not p.extra.use_existing) %}
+    <table class="changes"><caption>Will change</caption>
+      {% for field, new in p.changes.items() %}
+      <tr><th>{{ field }}</th><td class="old">{{ (c[field] if c else '')|pretty or '(empty)' }}</td><td class="arrow">→</td><td class="new">{{ new|pretty }}</td></tr>
+      {% endfor %}
+    </table>
+    {% endif %}
+    {% if p.extra.new_account %}
+    <table class="changes"><caption>Will create{% if p.kind == 'chow' %}, then link the old account to it{% endif %}</caption>
+      {% for field, val in p.extra.new_account.items() %}<tr><th>{{ field }}</th><td class="new">{{ val|pretty }}</td></tr>{% endfor %}
+    </table>
+    {% endif %}
+
+    <details open><summary>Website vs CRM</summary>
+    <table>
+      <tr><th></th><th>Website</th><th>CRM</th></tr>
+      {% for label, wk, ck in [('Name','name',F.name),('Street','street',F.street),('City','city',F.city),('State','state',F.state),('Zip','zip',F.zip),('Care','care_offerings',F.care_type),('Parent','','parent_name'),('Status','','status'),('Lifetime revenue','','lifetime_revenue'),('Outstanding AR','','outstanding_ar')] %}
+        {% set wv = w[wk] if (w and wk) else None %}{% set cv = c[ck] if c else None %}{% if c and ck == 'parent_name' and not cv %}{% set cv = c[F.parent_id] %}{% endif %}
+        <tr><th>{{ label }}</th>
+          <td>{{ (wv|join(', ') if wv is iterable and wv is not string else wv)|pretty }}</td>
+          <td class="{{ 'diff' if ck in p.changes else '' }}">{{ cv|pretty }}</td></tr>
+      {% endfor %}
+    </table>
+    </details>
+
+    {% set ev = p.evidence %}
+    {% if ev.rule %}<div class="ev"><strong>Rule:</strong> {{ ev.rule }}{% if ev.current_parent or ev.target_parent %} (from {{ ev.current_parent or 'no parent' }} to {{ ev.target_parent }}){% endif %}</div>{% endif %}
+    {% if ev.survivor %}<div class="ev"><strong>Keep:</strong> {{ ev.survivor.name }} ({{ ev.survivor[F.id] }}), {{ ev.survivor.status }}, revenue {{ ev.survivor.lifetime_revenue|pretty }}, AR {{ ev.survivor.outstanding_ar|pretty }}. <em>{{ ev.why_survivor }}</em></div>{% endif %}
+    {% if ev.match %}<div class="ev"><strong>Match evidence:</strong>
+      {% for aid, m in ev.match.items() %}{{ aid }}: score {{ m.score }} ({{ m.reasons|join(', ') }}){% if not loop.last %}; {% endif %}{% endfor %}</div>{% endif %}
+    {% if ev.nearest_crm_names %}<div class="ev"><strong>Closest CRM names (none matched on address or city):</strong>
+      {% for n in ev.nearest_crm_names %}{{ n.name }} ({{ n.city }}, {{ n.state }}, {{ n.similarity }}){% if not loop.last %}; {% endif %}{% endfor %}</div>{% endif %}
+    {% if ev.nearest_website_locations %}<div class="ev"><strong>Closest website names:</strong>
+      {% for n in ev.nearest_website_locations %}{{ n.name }} ({{ n.city }}, {{ n.state }}, {{ n.similarity }}){% if not loop.last %}; {% endif %}{% endfor %}</div>{% endif %}
+    {% if w and w.page_notes %}<div class="ev"><strong>Website says:</strong> {{ w.page_notes|join('; ') }}</div>{% endif %}
+
+    <details><summary>Full proposal</summary><pre>{{ p|pretty }}</pre></details>
+
+    <form class="actions" method="post" action="/decide/{{ row.key }}"
+          {% if p.kind in CONFIRM_KINDS %}data-confirm="{{ KIND_LABEL.get(p.kind, p.kind) }}: {{ p.summary }}"{% endif %}>
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      <input type="text" name="note" placeholder="Note (optional; goes into the CRM note when you approve)">
+      <button class="approve" name="action" value="approve">{{ 'Retry' if row.status in ('failed', 'applying') else 'Approve' }}</button>
+      <button class="reject" name="action" value="reject">Reject</button>
+    </form>
+  </div>
+  {% endfor %}
+  </section>
+{% endfor %}
+<p class="empty hidden" id="no-match">Nothing matches the filter.</p>
+
+{% if done %}
+<h2 id="decided">Decided <span class="n">{{ done|length }}</span></h2>
+<p class="hint">Rejected items never come back on their own. Use Reopen if you rejected one by mistake.</p>
+<table class="done">
+  <tr><th>When</th><th>Decision</th><th>Proposal</th><th>Note / result</th><th></th></tr>
+  {% for r in done %}
+  <tr><td>{{ r.decided_at }}</td><td class="s-{{ r.status }}">{{ r.status }}</td><td>{{ r.summary }}</td>
+    <td>{{ r.reviewer_note or '' }}{% if r.status == 'applied' and r.result %} <details><summary>result</summary><pre>{{ r.result }}</pre></details>{% endif %}</td>
+    <td>{% if r.status == 'rejected' %}
+      <form method="post" action="/reopen/{{ r.key }}"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="link">Reopen</button></form>
+    {% endif %}</td></tr>
+  {% endfor %}
+</table>
+{% endif %}
+</main>
+<script>
+  // ask again before the hard-to-undo ones, and stop double submits
+  document.querySelectorAll("form").forEach(f => f.addEventListener("submit", e => {
+    const btn = e.submitter;
+    if (f.dataset.confirm && btn && btn.value === "approve" &&
+        !confirm("Approve this? It writes to the CRM.\n\n" + f.dataset.confirm)) {
+      e.preventDefault(); return;
+    }
+    if (btn && btn.name) {  // disabled buttons are not sent, so carry the value over
+      const h = document.createElement("input");
+      h.type = "hidden"; h.name = btn.name; h.value = btn.value; f.appendChild(h);
+    }
+    f.querySelectorAll("button").forEach(b => b.disabled = true);
+    if (f.dataset.busy && btn) btn.textContent = f.dataset.busy;
+  }));
+
+  const q = document.getElementById("filter"), w = document.getElementById("only-warn");
+  function applyFilter() {
+    const term = (q.value || "").toLowerCase().trim(), onlyWarn = w.checked;
+    let any = false;
+    document.querySelectorAll("section.group").forEach(s => {
+      let shown = 0;
+      s.querySelectorAll(".card").forEach(c => {
+        const ok = (!term || c.dataset.text.includes(term)) && (!onlyWarn || c.dataset.warn === "1");
+        c.classList.toggle("hidden", !ok); shown += ok;
+      });
+      s.classList.toggle("hidden", !shown); any = any || shown > 0;
+    });
+    document.getElementById("no-match").classList.toggle("hidden", any);
+  }
+  if (q) { q.addEventListener("input", applyFilter); w.addEventListener("change", applyFilter); }
+  document.addEventListener("keydown", e => {
+    if (e.key === "/" && q && document.activeElement.tagName !== "INPUT") { e.preventDefault(); q.focus(); }
+  });
+</script>
+</body>
+</html>

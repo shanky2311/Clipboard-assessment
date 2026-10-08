@@ -1,0 +1,3 @@
+# Every day at 6:15 am, on the same machine as the review app so they share state/sync.db.
+# This only makes proposals. Nothing goes to the CRM until you approve it in the app.
+15 6 * * * cd /path/to/bellhaven-sync && .venv/bin/python pipeline.py run >> state/pipeline.log 2>&1

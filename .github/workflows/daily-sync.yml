@@ -1,0 +1,38 @@
+# Daily proposal run. The pipeline never writes to the CRM; it only adds proposals to
+# state/sync.db. That file is the record of past decisions (it is what stops re-proposals),
+# so the job commits it back to the repo for the review app to pick up.
+# In production this would be a shared database instead of a committed file.
+name: daily-sync
+
+# Manual for now: press "Run workflow" in the Actions tab. To run it every day,
+# add BH_TOKEN as a repository secret and put this back under "on:":
+#   schedule:
+#     - cron: "15 13 * * *"   # 06:15 Pacific (13:15 UTC)
+on:
+  workflow_dispatch:
+
+concurrency: daily-sync     # never two runs at once
+
+permissions:
+  contents: write
+
+jobs:
+  propose:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - run: python -m unittest discover tests
+      - run: python pipeline.py run
+        env:
+          BH_TOKEN: ${{ secrets.BH_TOKEN }}
+      - name: Save decision state
+        run: |
+          git config user.name "bellhaven-sync"
+          git config user.email "bellhaven-sync@users.noreply.github.com"
+          git add -f state/sync.db
+          git commit -m "daily sync run" || echo "no changes"
+          git push
