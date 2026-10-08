@@ -41,9 +41,13 @@ def _create(crm, fields):
     return crm.create_account(fields), True
 
 
-def apply(crm, p, reviewer_note=""):
+def apply(crm, p, reviewer_note="", reviewer=""):
     kind = p["kind"]
-    why = f"{p['summary']}." + (f" Reviewer: {reviewer_note}" if reviewer_note else "")
+    why = f"{p['summary']}."
+    if reviewer:
+        why += f" Approved by {reviewer}."
+    if reviewer_note:
+        why += f" Note: {reviewer_note}"
 
     if kind == "create_account":
         acct, created = _create(crm, p["extra"]["new_account"])

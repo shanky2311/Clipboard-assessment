@@ -37,11 +37,11 @@ Accounts are matched by address first (state, then street with zip or city), and
 | `crm.py` | API client. Pages through accounts, retries reads and updates, never retries a create |
 | `normalize.py` | Cleans names and addresses so "Rehab" vs "Rehabilitation" or "St" vs "Street" don't matter |
 | `match.py` | Scores and pairs locations with accounts, and builds the proposals. No network or database |
-| `store.py` | SQLite file with every proposal and decision. Stable keys keep reruns from repeating them |
-| `pipeline.py` | The daily job: scrape, read the CRM, match, save. Stops if the data shrinks suddenly |
+| `store.py` | SQLite file with every proposal, decision and reviewer. Stable keys keep reruns from repeating them |
+| `pipeline.py` | The daily job: scrape, read the CRM, match, save. Stops and alerts if the data shrinks suddenly |
 | `apply.py` | Writes one approved proposal. Re-checks the account first and refuses if it changed |
 | `app.py`, `templates/index.html` | The review page |
-| `tests/test_sync.py` | 31 tests with a fake CRM. No internet needed |
+| `tests/test_sync.py` | 43 tests with a fake CRM. No internet needed |
 | `schedule/crontab.txt`, `.github/workflows/daily-sync.yml` | Ways to run the pipeline on a schedule |
 
 ## Running it
@@ -76,12 +76,14 @@ All optional except the token. Set them in `.env` or the environment.
 | `BH_DB` | `state/sync.db` | Where proposals and decisions are kept |
 | `BH_SNAPSHOTS` | `state/snapshots` | A JSON copy of what each run saw |
 | `PORT` | `5000` | Review app port |
+| `BH_ALERT_WEBHOOK` | (none) | Slack or other incoming webhook. Gets a message when a run stops or fails |
 | `BH_DEBUG` | `false` | Flask debug mode. Only on your own machine |
 
 If the CRM renames a field, change it in `config.F`.
 
 ## The review page
 
+- Enter your name at the top before deciding. Every approve and reject records who made it, in the decision file and in the CRM note.
 - Proposals are grouped by type, with chips at the top to jump between groups.
 - Each card shows the change as old → new, the website and CRM side by side, and why it matched.
 - Warnings are shown in red. "Only ones with warnings" filters to those.
@@ -89,6 +91,8 @@ If the CRM renames a field, change it in `config.F`.
 - Duplicates, CHOW, new accounts and "not on the website" ask for confirmation before writing.
 - Text in the note box is added to the account's CRM note on approve.
 - A failed approve shows the error and a Retry button. Rejected items can be reopened.
+- Renames can be bulk approved. The button only takes high-confidence ones with no warnings, and each still goes through the same checks. Medium-confidence renames stay for a person.
+- "Download CSV" in the Decided list exports every decision (when, who, what, note, result) for an audit trail.
 
 ## Safe to rerun
 

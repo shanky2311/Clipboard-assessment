@@ -321,6 +321,7 @@ class AppTests(unittest.TestCase):
         self.client.get("/")
         with self.client.session_transaction() as s:
             self.token = s["csrf"]
+            s["reviewer"] = "Tester"
 
     def tearDown(self):
         self.webapp.db, self.webapp.crm = self._db, self._crm
@@ -363,6 +364,97 @@ class AppTests(unittest.TestCase):
         self.client.post(f"/reopen/{key}", data={"csrf": self.token})
         self.assertEqual(store.get(self.conn, key)["status"], "pending")
         self.assertFalse(self.crm.writes)
+
+
+class FeatureTests(AppTests):
+    """Reviewer names, bulk approve, CSV export. Reuses the AppTests setup."""
+
+    def test_page_renders(self):
+        pass  # covered in AppTests
+
+    def test_decisions_need_a_name(self):
+        with self.client.session_transaction() as s:
+            s.pop("reviewer")
+        key = self.key("rename")
+        self.client.post(f"/decide/{key}", data={"action": "approve", "csrf": self.token})
+        self.assertEqual(store.get(self.conn, key)["status"], "pending")
+        self.assertFalse(self.crm.writes)
+        self.client.post("/reviewer", data={"name": "  Sam   Lee ", "csrf": self.token})
+        self.client.post(f"/decide/{key}", data={"action": "approve", "csrf": self.token})
+        row = store.get(self.conn, key)
+        self.assertEqual((row["status"], row["reviewer"]), ("applied", "Sam Lee"))
+        self.assertIn("Approved by Sam Lee", self.crm.writes[0][2]["note"])
+
+    def test_bulk_approves_only_safe_ones(self):
+        renames = [r for r in store.by_status(self.conn, "pending") if r["kind"] == "rename"]
+        easy = [r for r in renames if r["confidence"] == "high" and not r["payload"]["warnings"]]
+        self.assertTrue(easy and len(easy) < len(renames))  # the fixtures have both kinds
+        self.client.post("/bulk/rename", data={"csrf": self.token})
+        for r in renames:
+            want = "applied" if r in easy else "pending"
+            self.assertEqual(store.get(self.conn, r["key"])["status"], want, r["summary"])
+        self.assertEqual(len(self.crm.writes), len(easy))
+
+    def test_bulk_refused_for_risky_kinds(self):
+        r = self.client.post("/bulk/chow", data={"csrf": self.token})
+        self.assertEqual(r.status_code, 400)
+        self.assertFalse(self.crm.writes)
+
+    def test_csv_export(self):
+        key = self.key("rename")
+        self.client.post(f"/decide/{key}", data={"action": "reject", "note": "not yet", "csrf": self.token})
+        r = self.client.get("/export.csv")
+        self.assertEqual(r.mimetype, "text/csv")
+        lines = r.data.decode().splitlines()
+        self.assertTrue(lines[0].startswith("decided_at,status,reviewer"))
+        self.assertIn("rejected,Tester,rename", lines[1])
+        self.assertIn("not yet", lines[1])
+
+
+class AlertTests(unittest.TestCase):
+    def setUp(self):
+        import config
+        self.config, self._hook = config, config.ALERT_WEBHOOK
+        self.sent = []
+        self._post = pipeline.requests.post
+        pipeline.requests.post = lambda url, json, timeout: self.sent.append((url, json["text"]))
+
+    def tearDown(self):
+        self.config.ALERT_WEBHOOK = self._hook
+        pipeline.requests.post = self._post
+
+    def test_stopped_run_sends_alert(self):
+        self.config.ALERT_WEBHOOK = "https://hooks.example/x"
+        crm, db = FakeCRM(ACCOUNTS), store.connect(":memory:")
+        pipeline.run(crm, LOCATIONS, db, snapshot=False)
+        with self.assertRaises(pipeline.Suspicious):
+            pipeline.run(crm, LOCATIONS[:1], db, snapshot=False)
+        self.assertEqual(len(self.sent), 1)
+        self.assertIn("run stopped", self.sent[0][1])
+
+    def test_no_webhook_no_alert(self):
+        self.config.ALERT_WEBHOOK = ""
+        self.assertFalse(pipeline.alert("hi"))
+        self.assertFalse(self.sent)
+
+
+class MigrationTest(unittest.TestCase):
+    def test_old_file_gets_reviewer_column(self):
+        import os
+        import sqlite3
+        import tempfile
+        path = os.path.join(tempfile.mkdtemp(), "old.db")
+        old = sqlite3.connect(path)
+        old.execute("CREATE TABLE proposals (key TEXT PRIMARY KEY, kind TEXT NOT NULL, summary TEXT NOT NULL,"
+                    " confidence TEXT, account_id TEXT, slug TEXT, payload TEXT NOT NULL,"
+                    " status TEXT NOT NULL DEFAULT 'pending', first_run INTEGER, last_seen_run INTEGER,"
+                    " decided_at TEXT, reviewer_note TEXT, result TEXT)")
+        old.execute("INSERT INTO proposals (key, kind, summary, payload) VALUES ('k', 'rename', 's', '{}')")
+        old.commit()
+        old.close()
+        db = store.connect(path)
+        store.decide(db, "k", "rejected", reviewer="Sam")
+        self.assertEqual(store.get(db, "k")["reviewer"], "Sam")
 
 
 class CRMRetryTests(unittest.TestCase):

@@ -9,6 +9,8 @@ import json
 import sys
 from datetime import datetime
 
+import requests
+
 import config
 import match
 import scrape
@@ -38,13 +40,29 @@ def sanity_check(db, locations, accounts):
                              f"anything. Check the site, then run with --force if it is real.")
 
 
+def alert(message):
+    """Post to BH_ALERT_WEBHOOK if it is set. Never let the alert itself crash the job."""
+    if not config.ALERT_WEBHOOK:
+        return False
+    try:
+        requests.post(config.ALERT_WEBHOOK, json={"text": f"bellhaven-sync: {message}"}, timeout=10)
+        return True
+    except requests.RequestException as e:
+        print("Could not send the alert:", e, file=sys.stderr)
+        return False
+
+
 def run(crm=None, locations=None, db=None, snapshot=True, force=False):
     crm = crm or CRM()
     db = db or store.connect()
     locations = locations if locations is not None else scrape.scrape()
     accounts = crm.list_accounts()
     if not force:
-        sanity_check(db, locations, accounts)
+        try:
+            sanity_check(db, locations, accounts)
+        except Suspicious as e:
+            alert(f"run stopped. {e}")
+            raise
 
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     if snapshot:
@@ -100,3 +118,6 @@ if __name__ == "__main__":
     except Suspicious as e:
         print("STOPPED:", e, file=sys.stderr)
         sys.exit(2)
+    except Exception as e:
+        alert(f"run failed. {type(e).__name__}: {e}")
+        raise

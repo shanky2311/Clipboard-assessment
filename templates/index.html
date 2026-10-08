@@ -66,6 +66,12 @@
   .done td { font-size: 12px; } .done .s-applied { color: var(--ok); } .done .s-rejected { color: var(--err); }
   .hidden { display: none !important; }
   .hint { font-size: 12px; color: var(--muted); }
+  .who { display: flex; gap: 6px; align-items: center; font-size: 13px; }
+  .who input { padding: 4px 8px; border-radius: 4px; border: 0; width: 140px; font: inherit; }
+  .who button { padding: 4px 10px; }
+  .bulk { margin-left: auto; font-size: 12px; }
+  .bulk button { padding: 3px 10px; font-size: 12px; }
+  .done-head { display: flex; align-items: baseline; gap: 12px; }
   @media (max-width: 640px) { header, main { padding-left: 16px; padding-right: 16px; } th { width: 90px; } }
 </style>
 </head>
@@ -75,6 +81,11 @@
     <strong>Bellhaven sync review</strong>
     <span class="stat">{{ n_pending }} to review{% if n_failed %} · {{ n_failed }} failed{% endif %}</span>
     {% if run %}<span class="stat">last run {{ run.started_at }} · {{ run.locations }} locations · {{ run.accounts }} accounts · {{ run.new }} new</span>{% endif %}
+    <form class="who" method="post" action="/reviewer">
+      <input type="hidden" name="csrf" value="{{ csrf }}">
+      {% if reviewer %}<span>Reviewing as <strong>{{ reviewer }}</strong></span><input type="hidden" name="name" value=""><button class="link" title="Change name">change</button>
+      {% else %}<input type="text" name="name" placeholder="Your name" required aria-label="Your name"><button class="run">Start</button>{% endif %}
+    </form>
     <form method="post" action="/run" data-busy="Running…">
       <input type="hidden" name="csrf" value="{{ csrf }}">
       <button class="run">Run pipeline now</button>
@@ -103,7 +114,11 @@
 
 {% for kind, label, items in groups %}
   <section class="group">
-  <h2 id="g-{{ kind }}">{{ label }} <span class="n">{{ items|length }}</span></h2>
+  <h2 id="g-{{ kind }}">{{ label }} <span class="n">{{ items|length }}</span>
+    {% if kind in BULK_KINDS %}{% set easy = items|selectattr('status', 'equalto', 'pending')|selectattr('confidence', 'equalto', 'high')|rejectattr('payload.warnings')|list %}
+      {% if easy %}<form class="bulk" method="post" action="/bulk/{{ kind }}" data-confirm="Approve all {{ easy|length }} high-confidence {{ label|lower }} items with no warnings? Each one writes to the CRM." data-bulk="1">
+        <input type="hidden" name="csrf" value="{{ csrf }}"><button class="approve">Approve {{ easy|length }} high-confidence</button></form>{% endif %}
+    {% endif %}</h2>
   {% for row in items %}{% set p = row.payload %}{% set w = p.evidence.website %}{% set c = p.evidence.crm %}
   <div class="card c-{{ p.confidence }} {{ row.status }}" id="k-{{ row.key }}" data-warn="{{ 1 if p.warnings else 0 }}"
        data-text="{{ (p.summary ~ ' ' ~ (p.account_id or '') ~ ' ' ~ (w.city if w else '') ~ ' ' ~ (c.name if c else ''))|lower }}">
@@ -172,12 +187,12 @@
 <p class="empty hidden" id="no-match">Nothing matches the filter.</p>
 
 {% if done %}
-<h2 id="decided">Decided <span class="n">{{ done|length }}</span></h2>
+<div class="done-head"><h2 id="decided">Decided <span class="n">{{ done|length }}</span></h2><a class="hint" href="/export.csv">Download CSV</a></div>
 <p class="hint">Rejected items never come back on their own. Use Reopen if you rejected one by mistake.</p>
 <table class="done">
-  <tr><th>When</th><th>Decision</th><th>Proposal</th><th>Note / result</th><th></th></tr>
+  <tr><th>When</th><th>Decision</th><th>By</th><th>Proposal</th><th>Note / result</th><th></th></tr>
   {% for r in done %}
-  <tr><td>{{ r.decided_at }}</td><td class="s-{{ r.status }}">{{ r.status }}</td><td>{{ r.summary }}</td>
+  <tr><td>{{ r.decided_at }}</td><td class="s-{{ r.status }}">{{ r.status }}</td><td>{{ r.reviewer or '' }}</td><td>{{ r.summary }}</td>
     <td>{{ r.reviewer_note or '' }}{% if r.status == 'applied' and r.result %} <details><summary>result</summary><pre>{{ r.result }}</pre></details>{% endif %}</td>
     <td>{% if r.status == 'rejected' %}
       <form method="post" action="/reopen/{{ r.key }}"><input type="hidden" name="csrf" value="{{ csrf }}"><button class="link">Reopen</button></form>
@@ -190,7 +205,8 @@
   // ask again before the hard-to-undo ones, and stop double submits
   document.querySelectorAll("form").forEach(f => f.addEventListener("submit", e => {
     const btn = e.submitter;
-    if (f.dataset.confirm && btn && btn.value === "approve" &&
+    if (f.dataset.bulk && !confirm(f.dataset.confirm)) { e.preventDefault(); return; }
+    if (!f.dataset.bulk && f.dataset.confirm && btn && btn.value === "approve" &&
         !confirm("Approve this? It writes to the CRM.\n\n" + f.dataset.confirm)) {
       e.preventDefault(); return;
     }

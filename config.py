@@ -32,6 +32,9 @@ BELLHAVEN_PARENT_NAME = "Bellhaven Senior Living"
 # Set this to true if you want the CHOW check there too.
 CHOW_APPLIES_TO_UNPARENTED = os.environ.get("CHOW_APPLIES_TO_UNPARENTED", "false").lower() == "true"
 
+# Optional. A Slack (or any) incoming webhook URL. The pipeline posts here when a run stops.
+ALERT_WEBHOOK = os.environ.get("BH_ALERT_WEBHOOK", "")
+
 # Field names in the CRM. If the API calls something by another name, change it here.
 F = {
     "id": "account_id",

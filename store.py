@@ -21,7 +21,8 @@ CREATE TABLE IF NOT EXISTS proposals (
     last_seen_run INTEGER,
     decided_at   TEXT,
     reviewer_note TEXT,
-    result       TEXT
+    result       TEXT,
+    reviewer     TEXT
 );
 CREATE TABLE IF NOT EXISTS runs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -47,6 +48,11 @@ def connect(path=config.DB_PATH):
     db = sqlite3.connect(path, timeout=10)
     db.row_factory = sqlite3.Row
     db.executescript(SCHEMA)
+    # files made before the reviewer column existed
+    cols = {r[1] for r in db.execute("PRAGMA table_info(proposals)")}
+    if "reviewer" not in cols:
+        db.execute("ALTER TABLE proposals ADD COLUMN reviewer TEXT")
+        db.commit()
     return db
 
 
@@ -106,15 +112,34 @@ def claim(db, key):
 def reopen(db, key):
     """Put a rejected proposal back on the list. The next run supersedes it if the data moved on."""
     cur = db.execute("UPDATE proposals SET status='pending', decided_at=NULL, reviewer_note=NULL, "
-                     "result=NULL WHERE key=? AND status='rejected'", (key,))
+                     "result=NULL, reviewer=NULL WHERE key=? AND status='rejected'", (key,))
     db.commit()
     return cur.rowcount == 1
 
 
-def decide(db, key, status, note="", result=None):
-    db.execute("UPDATE proposals SET status=?, decided_at=?, reviewer_note=?, result=? WHERE key=?",
-               (status, now(), note, json.dumps(result, default=str) if result else None, key))
+def decide(db, key, status, note="", result=None, reviewer=None):
+    db.execute("UPDATE proposals SET status=?, decided_at=?, reviewer_note=?, result=?, reviewer=? WHERE key=?",
+               (status, now(), note, json.dumps(result, default=str) if result else None, reviewer, key))
     db.commit()
+
+
+AUDIT_COLUMNS = ["decided_at", "status", "reviewer", "kind", "account_id", "slug", "summary",
+                 "reviewer_note", "result", "first_run", "key"]
+
+
+def audit_rows(db):
+    """Every decision, newest first, for the CSV export."""
+    q = (f"SELECT {', '.join(AUDIT_COLUMNS)} FROM proposals "
+         "WHERE status IN ('applied','rejected','failed','superseded') ORDER BY decided_at DESC")
+    rows = []
+    for r in db.execute(q):
+        row = dict(r)
+        if row["result"]:
+            # keep ids and errors, drop the full CRM response
+            res = json.loads(row["result"])
+            row["result"] = json.dumps({k: v for k, v in res.items() if k not in ("response", "patched")})
+        rows.append(row)
+    return rows
 
 
 def last_run(db):
