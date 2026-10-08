@@ -126,7 +126,17 @@ The CRM stores the billing address, and the website shows the building. They are
 
 ### How I used AI tools
 
-I used Claude, and I asked for it in small steps instead of handing over the whole brief at once. That way I could check each piece before moving on. These are the prompts, in order:
+I used Claude as a pair programmer. I set the direction, split the work into small steps, and checked each step against the brief and the real data before moving on. Claude wrote most of the first draft of the code. The business decisions were mine: what counts as a match, which duplicate to keep, how to read the CHOW rule, and what is allowed to write to the CRM.
+
+**How I set up the work**
+
+- **Research before code.** The first prompt asked for no code at all, only a read of the website and API docs and a list of likely traps.
+- **One piece per prompt, each with a clear rule to meet.** For example: "a name alone should never be a match", "show me the scoring before you go further".
+- **The brief's rules in its own words.** For the CHOW rule I gave the exact condition (revenue *and* open AR) so it could not be loosened.
+- **Tests built from the traps I found,** not generic tests. Each tricky case on the site became a fake CRM record.
+- **A human gate on every write.** I designed it so the AI-written pipeline can only propose. Nothing reaches the CRM until I click Approve.
+
+**Build prompts, in order**
 
 1. "Here is a take home brief. Before writing anything, read the website and the API docs and tell me what the data looks like and where the traps might be."
 2. "The communities list is paginated. Write a scraper that walks every page, opens each community page and pulls name, street, city, state, zip and care offerings. Keep it simple."
@@ -140,7 +150,31 @@ I used Claude, and I asked for it in small steps instead of handing over the who
 10. "Before it writes, check the account has not changed since the proposal. Also make sure approving a create twice does not make two accounts."
 11. "Give me a cron line and a GitHub Actions file to run it daily."
 
-After that I ran it against my own CRM copy and read each proposal next to the website and the CRM browser before approving it.
+**Review and hardening prompts**
+
+Once it worked on test data, I ran it against my CRM copy and used Claude to review it.
+
+12. "Walk me through what this project does and get it working." The read-only probe showed the real API uses `account_id` and `billing_street`/`billing_city`/`billing_state`/`billing_zip`, not the names the code assumed. Fixed in `config.py`.
+13. "Review the proposals before I approve anything." I went through all 29 with it and flagged two for a closer look (below).
+14. "Review the code." This found three problems: a proposal that failed once could never succeed, a PO box billing address would be replaced by the building's street, and debug mode was on.
+15. "Do all the fixes, improve the UI and make it stronger." This added a claim-before-write against double clicks, form tokens, no retries on account creation, a stop when the website or CRM shrinks, and the UI changes.
+16. "Is this tested?" This added tests for the CRM client and a real browser run of the page against a fake CRM, checking that one confirmed Approve makes exactly one write.
+
+**What I checked myself**
+
+- I read every proposal next to the website and the CRM before approving anything.
+- I flagged Ashtabula, where the website street would replace a PO box. That is a billing address and may be right on purpose. This became the PO box warning.
+- I flagged Sandusky for billing. It is no longer on the website but has $130,000 revenue and $5,200 open AR.
+- I checked the CHOW results by hand: Marietta and Tiffin have revenue and open AR, so the old accounts stay. Lima has revenue but no AR, so it moves.
+- I approved and rejected by hand, then confirmed in the CRM that only the approved changes landed. A rerun showed 0 new proposals.
+- I made the judgment calls in this writeup: Needs Review instead of Inactive, billing history first when picking the duplicate to keep, and how to treat accounts with no parent.
+- I kept the API token out of the code and the repo.
+
+**Where the AI got it wrong, and what I learned**
+
+- **It guessed the API field names.** The tests still passed, because the fake CRM used the same wrong names. Lesson: probe the real API before trusting tests, since tests are only as good as their fake data.
+- **It retried account creates after a timeout.** If the first try had worked, that makes two accounts. Creates are no longer retried.
+- **A failed proposal could never succeed,** because reruns did not refresh it. It only showed up because I asked for a review of the code, not just of the output.
 
 ### What I would build next
 
